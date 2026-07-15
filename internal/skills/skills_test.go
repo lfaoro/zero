@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -144,6 +145,25 @@ func TestLoadMissingDirYieldsEmpty(t *testing.T) {
 	}
 	if len(loaded) != 0 {
 		t.Fatalf("expected 0 skills for missing dir, got %d", len(loaded))
+	}
+}
+
+func TestLoadNotDirectoryErrors(t *testing.T) {
+	// Portable across Unix and Windows: a regular file is not a skills root.
+	// Windows reports ReadDir(file) as ErrNotExist; load must reclassify it.
+	notDir := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(notDir, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(notDir)
+	if err == nil {
+		t.Fatalf("expected error for non-directory skills root, got loaded=%#v", loaded)
+	}
+	if errors.Is(err, os.ErrNotExist) && !errors.Is(err, errNotDirectory) {
+		t.Fatalf("non-directory skills root must not look missing: %v", err)
+	}
+	if loaded != nil {
+		t.Fatalf("expected nil skills on non-directory root, got %#v", loaded)
 	}
 }
 
@@ -443,8 +463,9 @@ func TestLoadFromRootsSkipsEmptyAndMissing(t *testing.T) {
 }
 
 func TestLoadFromRootsBubblesPrimaryError(t *testing.T) {
-	// A regular file is not a directory; ReadDir returns a non-ErrNotExist error.
-	// That must bubble from the first non-empty root instead of looking like "no skills".
+	// A regular file is not a directory. On Unix ReadDir fails with ENOTDIR; on
+	// Windows that case is aliased to ErrNotExist, so load must reclassify an
+	// existing non-directory and bubble it from the first non-empty root.
 	notDir := filepath.Join(t.TempDir(), "not-a-dir")
 	if err := os.WriteFile(notDir, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -455,6 +476,11 @@ func TestLoadFromRootsBubblesPrimaryError(t *testing.T) {
 	loaded, dups, err := LoadFromRoots([]string{notDir, optional})
 	if err == nil {
 		t.Fatalf("expected primary root error, got loaded=%#v dups=%#v", loaded, dups)
+	}
+	// Unix returns ENOTDIR; Windows reclassifies via errNotDirectory because
+	// ENOTDIR aliases ErrNotExist there. Either way it must not look missing.
+	if errors.Is(err, os.ErrNotExist) && !errors.Is(err, errNotDirectory) {
+		t.Fatalf("primary non-directory must not look missing: %v", err)
 	}
 	if loaded != nil {
 		t.Fatalf("expected nil skills on primary error, got %#v", loaded)

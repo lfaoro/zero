@@ -28,6 +28,11 @@ type Skill struct {
 
 const skillFileName = "SKILL.md"
 
+// errNotDirectory is returned when a skills root path exists but is not a
+// directory. On Windows, os.ReadDir reports that case as ErrNotExist
+// (ENOTDIR aliases ERROR_PATH_NOT_FOUND), so load reclassifies it explicitly.
+var errNotDirectory = errors.New("not a directory")
+
 // DefaultDir resolves the skills directory, mirroring sessions.DefaultRoot. An
 // explicit ZERO_SKILLS_DIR override wins; otherwise it is
 // $XDG_DATA_HOME/zero/skills or ~/.local/share/zero/skills. The directory is
@@ -261,6 +266,16 @@ func load(dir string) ([]Skill, []DuplicateName, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			// Windows maps ENOTDIR to ERROR_PATH_NOT_FOUND, which is also
+			// ErrNotExist. A primary skills path that exists but is not a
+			// directory must still surface as a load error, not "no skills".
+			if info, statErr := os.Stat(dir); statErr == nil && !info.IsDir() {
+				return nil, nil, &os.PathError{
+					Op:   "readdir",
+					Path: dir,
+					Err:  errNotDirectory,
+				}
+			}
 			return []Skill{}, nil, nil
 		}
 		return nil, nil, err
