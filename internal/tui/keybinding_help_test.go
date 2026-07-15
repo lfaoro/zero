@@ -79,6 +79,7 @@ func TestHelpOverlayViewRendersGroupsAndKeys(t *testing.T) {
 		"Ctrl+T", "cycle reasoning effort",
 		"Shift+Tab", "Ctrl+P", "Ctrl+O",
 		"drill into its sub-session",
+		"Ctrl+X then letter", "/model",
 		keybindingHelpFooter,
 	} {
 		if !strings.Contains(view, want) {
