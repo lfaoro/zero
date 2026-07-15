@@ -442,6 +442,57 @@ func TestLoadFromRootsSkipsEmptyAndMissing(t *testing.T) {
 	}
 }
 
+func TestLoadFromRootsBubblesPrimaryError(t *testing.T) {
+	// A regular file is not a directory; ReadDir returns a non-ErrNotExist error.
+	// That must bubble from the first non-empty root instead of looking like "no skills".
+	notDir := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(notDir, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	optional := t.TempDir()
+	writeSkill(t, optional, "fallback", "---\nname: fallback\n---\nbody\n")
+
+	loaded, dups, err := LoadFromRoots([]string{notDir, optional})
+	if err == nil {
+		t.Fatalf("expected primary root error, got loaded=%#v dups=%#v", loaded, dups)
+	}
+	if loaded != nil {
+		t.Fatalf("expected nil skills on primary error, got %#v", loaded)
+	}
+	if dups != nil {
+		t.Fatalf("expected nil dups on primary error, got %#v", dups)
+	}
+}
+
+func TestLoadFromRootsOptionalRootFailOpen(t *testing.T) {
+	primary := t.TempDir()
+	writeSkill(t, primary, "keep", "---\nname: keep\n---\nbody\n")
+	notDir := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(notDir, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	agents := t.TempDir()
+	writeSkill(t, agents, "agents-only", "---\nname: agents-only\n---\nbody\n")
+
+	loaded, dups, err := LoadFromRoots([]string{primary, notDir, agents})
+	if err != nil {
+		t.Fatalf("optional root failure must not fail merge: %v", err)
+	}
+	byName := map[string]Skill{}
+	for _, skill := range loaded {
+		byName[skill.Name] = skill
+	}
+	if byName["keep"].Name != "keep" {
+		t.Fatalf("primary skill missing: %#v", loaded)
+	}
+	if byName["agents-only"].Name != "agents-only" {
+		t.Fatalf("later optional skill should still load: %#v", loaded)
+	}
+	if len(dups) != 0 {
+		t.Fatalf("unexpected dups: %#v", dups)
+	}
+}
+
 func TestListFromRootsStripsContent(t *testing.T) {
 	dir := t.TempDir()
 	writeSkill(t, dir, "demo", "---\nname: demo\n---\nbody content\n")

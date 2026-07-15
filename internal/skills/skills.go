@@ -150,14 +150,20 @@ func Load(dir string) ([]Skill, error) {
 }
 
 // LoadFromRoots loads and merges skills from the provided directories (earlier
-// entries win on name clashes). Missing and empty roots are skipped. Intra-root
-// and cross-root collisions are reported as DuplicateName. A root that fails to
-// load for a non-missing reason is skipped rather than failing the whole merge,
-// matching the previous plugin-merge behaviour.
+// entries win on name clashes). Empty roots are skipped. Missing directories are
+// treated as empty (same as Load). Intra-root and cross-root collisions are
+// reported as DuplicateName.
+//
+// The first non-empty root is the required primary: non-missing load failures
+// (permission, I/O, not a directory, etc.) are returned so callers do not
+// confuse a broken primary skills dir with "no skills". Later optional roots
+// (e.g. ~/.agents/skills, plugin roots) fail open so one bad optional directory
+// does not hide the rest.
 func LoadFromRoots(dirs []string) ([]Skill, []DuplicateName, error) {
 	merged := make([]Skill, 0)
 	duplicates := []DuplicateName{}
 	byName := map[string]int{}
+	primary := true
 
 	for _, dir := range dirs {
 		if strings.TrimSpace(dir) == "" {
@@ -165,9 +171,15 @@ func LoadFromRoots(dirs []string) ([]Skill, []DuplicateName, error) {
 		}
 		loaded, rootDups, err := load(dir)
 		if err != nil {
-			// Fail open per root: one bad directory must not hide the rest.
+			if primary {
+				// Required primary root: surface real I/O failures instead of
+				// collapsing to an empty skill list.
+				return nil, nil, err
+			}
+			// Optional roots fail open: one bad directory must not hide the rest.
 			continue
 		}
+		primary = false
 		duplicates = append(duplicates, rootDups...)
 		for _, skill := range loaded {
 			if winnerIdx, clash := byName[skill.Name]; clash {
