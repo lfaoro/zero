@@ -129,10 +129,11 @@ tagged. Until then, source builds report the version `dev`.
 ### Added
 - **TUI keyboard shortcuts for common slash commands:** `Ctrl+X` is a leader key; a follow-up letter
   runs the matching builtin command without clearing the composer draft (e.g. `Ctrl+X` `m` → `/model`,
-  `p` → `/provider`, `r` → `/resume`, `c` → `/clear`, `t` → `/tools`, `e` → `/edit`, plus plan, voice,
-  STT model, context, stop, image, rewind, and retry). `Ctrl+X` `?` opens a bordered chord-map modal
-  (same chrome as the `?` keyboard-shortcut overlay) listing every wired mapping; Esc / second
-  `Ctrl+X` / timeout cancel a pending leader chord.
+  `p` → `/provider`, `r` → `/resume`, `c` → `/clear`, `t` → `/tools`, plus plan, voice, STT model,
+  context, stop, image, rewind, and retry). `/edit` is intentionally not bound (it would replace the
+  composer and discard an in-progress draft). `Ctrl+X` `?` opens a bordered chord-map modal (same
+  chrome as the `?` keyboard-shortcut overlay) listing every wired mapping; Esc / second `Ctrl+X` /
+  timeout cancel a pending leader chord.
 - **Emacs-style menu navigation:** `Ctrl+P` / `Ctrl+N` move previous / next in pickers, slash/file
   suggestions, permission prompts, ask-user option lists, and provider/MCP wizard lists (same as ↑/↓).
   Idle `Ctrl+P` still toggles the plan panel when no menu is open.

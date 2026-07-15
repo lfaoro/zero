@@ -28,7 +28,6 @@ var leaderCommandByKey = map[rune]string{
 	'r': "/resume",
 	'u': "/rewind",
 	't': "/tools",
-	'e': "/edit",
 	'R': "/retry",
 }
 
@@ -105,7 +104,6 @@ func leaderHelpBindings() []keybinding {
 		{"Ctrl+X r", "open /resume"},
 		{"Ctrl+X u", "run /rewind"},
 		{"Ctrl+X t", "run /tools"},
-		{"Ctrl+X e", "run /edit"},
 		{"Ctrl+X R", "run /retry"},
 		{"Ctrl+X ?", "show this list"},
 	}
