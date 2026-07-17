@@ -781,7 +781,7 @@ func newModel(ctx context.Context, options Options) model {
 		// No file loaded: use code defaults (tests / callers that omit Options).
 		leaderFile = config.DefaultKeybindingsFile(PrimarySlashNames())
 	}
-	resolvedLeader := resolveLeaderConfig(leaderFile, resolvedKeyBindings)
+	resolvedLeader, resolvedKeyBindings := resolveLeaderConfig(leaderFile, resolvedKeyBindings)
 
 	m := model{
 		ctx:                         ctx,

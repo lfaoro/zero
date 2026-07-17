@@ -10,7 +10,7 @@ import (
 
 func TestResolveLeaderConfigDefaults(t *testing.T) {
 	file := config.DefaultKeybindingsFile(PrimarySlashNames())
-	got := resolveLeaderConfig(file, keyBindings{})
+	got, _ := resolveLeaderConfig(file, keyBindings{})
 	if got.key.Label() != "Ctrl+X" {
 		t.Fatalf("leader key = %q", got.key.Label())
 	}
@@ -32,7 +32,7 @@ func TestResolveLeaderConfigUnassignAndRemap(t *testing.T) {
 	}
 	// Merge onto defaults the way ResolveKeybindings would for a partial overlay.
 	merged := config.ResolveKeybindings(config.DefaultKeybindingsFile(PrimarySlashNames()), file, config.KeybindingsFile{})
-	got := resolveLeaderConfig(merged, keyBindings{})
+	got, _ := resolveLeaderConfig(merged, keyBindings{})
 	if got.commands['m'] != "/theme" {
 		t.Fatalf("m = %q, want /theme", got.commands['m'])
 	}
@@ -43,13 +43,71 @@ func TestResolveLeaderConfigUnassignAndRemap(t *testing.T) {
 
 func TestResolveLeaderConfigRejectsReservedLeaderKey(t *testing.T) {
 	for _, key := range []string{"ctrl+p", "ctrl+n", "ctrl+g", "esc", "x"} {
-		got := resolveLeaderConfig(config.KeybindingsFile{LeaderKey: key}, keyBindings{})
+		got, _ := resolveLeaderConfig(config.KeybindingsFile{LeaderKey: key}, keyBindings{})
 		if got.key.Label() != "Ctrl+X" {
 			t.Fatalf("leaderKey %q should fall back to Ctrl+X, got %s", key, got.key.Label())
 		}
 		if len(got.notices) == 0 {
 			t.Fatalf("leaderKey %q should produce a notice", key)
 		}
+		if !leaderKeyUsable(got.key, keyBindings{}) {
+			t.Fatalf("fallback for %q must be usable, got %s", key, got.key.Label())
+		}
+	}
+}
+
+func TestResolveLeaderConfigFallbackNotConflictingToggle(t *testing.T) {
+	// Preferred leader conflicts with togglePlan; fallback Ctrl+X must still be free.
+	toggles := keyBindings{togglePlan: parseBinding("ctrl+y")}
+	got, outToggles := resolveLeaderConfig(config.KeybindingsFile{LeaderKey: "ctrl+y"}, toggles)
+	if got.key.Label() != "Ctrl+X" {
+		t.Fatalf("leader = %q, want Ctrl+X", got.key.Label())
+	}
+	if !leaderKeyUsable(got.key, outToggles) {
+		t.Fatalf("fallback leader must not conflict with toggles: %s", got.key.Label())
+	}
+	if len(got.notices) == 0 || !strings.Contains(got.notices[0], "global toggle") {
+		t.Fatalf("want toggle-conflict notice, got %v", got.notices)
+	}
+}
+
+func TestResolveLeaderConfigSanitizesToggleClaimingDefault(t *testing.T) {
+	// A remapped toggle owns Ctrl+X; invalid leaderKey would naively fall back to
+	// Ctrl+X and shadow the toggle — clear the toggle instead.
+	toggles := keyBindings{toggleSidebar: parseBinding("ctrl+x")}
+	got, outToggles := resolveLeaderConfig(config.KeybindingsFile{LeaderKey: "ctrl+p"}, toggles)
+	if got.key.Label() != "Ctrl+X" {
+		t.Fatalf("leader = %q, want Ctrl+X after freeing default", got.key.Label())
+	}
+	if !outToggles.toggleSidebar.isZero() {
+		t.Fatalf("toggleSidebar should be cleared, got %s", outToggles.toggleSidebar.Label())
+	}
+	if !leaderKeyUsable(got.key, outToggles) {
+		t.Fatal("leader must be usable after toggle sanitize")
+	}
+	found := false
+	for _, n := range got.notices {
+		if strings.Contains(n, "toggleSidebar") || strings.Contains(n, "conflicted with") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("want notice about clearing toggle, got %v", got.notices)
+	}
+}
+
+func TestResolveLeaderConfigEmptyLeaderKeyStillAvoidsToggleCollision(t *testing.T) {
+	// No leaderKey in file → default Ctrl+X, but toggle already claims it.
+	toggles := keyBindings{toggleDetailed: parseBinding("ctrl+x")}
+	got, outToggles := resolveLeaderConfig(config.KeybindingsFile{}, toggles)
+	if got.key.Label() != "Ctrl+X" {
+		t.Fatalf("leader = %q", got.key.Label())
+	}
+	if !outToggles.toggleDetailed.isZero() {
+		t.Fatalf("toggleDetailed claiming Ctrl+X should be cleared, got %s", outToggles.toggleDetailed.Label())
+	}
+	if !leaderKeyUsable(got.key, outToggles) {
+		t.Fatal("default leader must be usable")
 	}
 }
 
@@ -61,7 +119,7 @@ func TestResolveLeaderConfigRejectsEditAndUnknown(t *testing.T) {
 		},
 	}
 	merged := config.ResolveKeybindings(config.DefaultKeybindingsFile(PrimarySlashNames()), file, config.KeybindingsFile{})
-	got := resolveLeaderConfig(merged, keyBindings{})
+	got, _ := resolveLeaderConfig(merged, keyBindings{})
 	if _, ok := got.commands['e']; ok {
 		t.Fatal("/edit must not be bound")
 	}
@@ -83,7 +141,7 @@ func TestResolveLeaderConfigDuplicateLetters(t *testing.T) {
 			"/provider": "p",
 		},
 	}
-	got := resolveLeaderConfig(file, keyBindings{})
+	got, _ := resolveLeaderConfig(file, keyBindings{})
 	// sort.Strings: /model before /theme, so /model wins.
 	if got.commands['m'] != "/model" {
 		t.Fatalf("duplicate should keep /model, got %q (notices=%v)", got.commands['m'], got.notices)
